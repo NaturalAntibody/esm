@@ -107,7 +107,7 @@ def sample_sequence_in_complex(model, coords, target_chain_id, temperature=1.,
 
 
 def score_sequence_in_complex(model, alphabet, coords, target_chain_id,
-        target_seq, padding_length=10, score_indices: list[int] = None):
+        target_seq, padding_length=10, positions_to_score: list[int] = None):
     """
     Scores sequence for one chain in a complex.
     Args:
@@ -129,16 +129,19 @@ def score_sequence_in_complex(model, alphabet, coords, target_chain_id,
     loss, target_padding_mask = get_sequence_loss(model, alphabet, all_coords,
             target_seq)
     
-    if score_indices is not None:
-        loss = loss[score_indices]
-        target_padding_mask = target_padding_mask[score_indices]
+    if positions_to_score is not None:
+        loss = loss[positions_to_score]
+        target_padding_mask = target_padding_mask[positions_to_score]
 
     ll_fullseq = -np.sum(loss * ~target_padding_mask) / np.sum(
             ~target_padding_mask)
 
     # Also calculate average when excluding masked portions
     coord_mask = np.all(np.isfinite(coords[target_chain_id]), axis=(-1, -2))
+    if positions_to_score is not None:
+        coord_mask = coord_mask[positions_to_score]
     ll_withcoord = -np.sum(loss * coord_mask) / np.sum(coord_mask)
+
     return ll_fullseq, ll_withcoord
 
 
