@@ -77,7 +77,7 @@ def _concatenate_coords(coords, target_chain_id, padding_length=10):
     return coords_concatenated
 
 
-def sample_sequence_in_complex(model, coords, target_chain_id, temperature=1.,
+def sample_sequence_in_complex(model, coords, target_chain_id, sequence: str, temperature=1.,
         padding_length=10, positions_to_sample: list[int] = None):
     """
     Samples sequence for one chain in a complex.
@@ -95,11 +95,14 @@ def sample_sequence_in_complex(model, coords, target_chain_id, temperature=1.,
     device = next(model.parameters()).device
 
     # Supply padding tokens for other chains to avoid unused sampling for speed
-    padding_pattern = ['<pad>'] * all_coords.shape[0]
+    padding_pattern = list(sequence) + ['<pad>'] * (all_coords.shape[0] - len(sequence))
+
     if positions_to_sample is None:
-        positions_to_sample = list(range(target_chain_len)) 
+        positions_to_sample = list(range(target_chain_len))
+
     for i in positions_to_sample:
         padding_pattern[i] = '<mask>'
+        
     sampled = model.sample(all_coords, partial_seq=padding_pattern,
             temperature=temperature, device=device)
     sampled = sampled[:target_chain_len]
