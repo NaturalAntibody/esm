@@ -36,7 +36,7 @@ def load_hub_workaround(url):
         fn = Path(url).name
         data = torch.load(
             f"{torch.hub.get_dir()}/checkpoints/{fn}",
-            map_location="cpu",
+            map_location="cpu", weights_only=False
         )
     except urllib.error.HTTPError as e:
         raise Exception(f"Could not load {url}, check if you specified a correct model name?")
@@ -67,11 +67,11 @@ def load_model_and_alphabet_hub(model_name):
 def load_model_and_alphabet_local(model_location):
     """Load from local path. The regression weights need to be co-located"""
     model_location = Path(model_location)
-    model_data = torch.load(str(model_location), map_location="cpu")
+    model_data = torch.load(str(model_location), map_location="cpu", weights_only=False)
     model_name = model_location.stem
     if _has_regression_weights(model_name):
         regression_location = str(model_location.with_suffix("")) + "-contact-regression.pt"
-        regression_data = torch.load(regression_location, map_location="cpu")
+        regression_data = torch.load(regression_location, map_location="cpu", weights_only=False)
     else:
         regression_data = None
     return load_model_and_alphabet_core(model_name, model_data, regression_data)
