@@ -77,8 +77,8 @@ def _concatenate_coords(coords, target_chain_id, padding_length=10):
     return coords_concatenated
 
 
-def sample_sequence_in_complex(model, coords, target_chain_id, temperature=1.,
-        padding_length=10):
+def sample_sequence_in_complex(model, coords, target_chain_id, sequence: str, temperature=1.,
+        padding_length=10, positions_to_sample: list[int] = None):
     """
     Samples sequence for one chain in a complex.
     Args:
@@ -95,9 +95,14 @@ def sample_sequence_in_complex(model, coords, target_chain_id, temperature=1.,
     device = next(model.parameters()).device
 
     # Supply padding tokens for other chains to avoid unused sampling for speed
-    padding_pattern = ['<pad>'] * all_coords.shape[0]
-    for i in range(target_chain_len):
+    padding_pattern = list(sequence) + ['<pad>'] * (all_coords.shape[0] - len(sequence))
+
+    if positions_to_sample is None:
+        positions_to_sample = list(range(target_chain_len))
+
+    for i in positions_to_sample:
         padding_pattern[i] = '<mask>'
+        
     sampled = model.sample(all_coords, partial_seq=padding_pattern,
             temperature=temperature, device=device)
     sampled = sampled[:target_chain_len]
@@ -105,7 +110,7 @@ def sample_sequence_in_complex(model, coords, target_chain_id, temperature=1.,
 
 
 def score_sequence_in_complex(model, alphabet, coords, target_chain_id,
-        target_seq, padding_length=10):
+        target_seq, padding_length=10, positions_to_score: list[int] = None):
     """
     Scores sequence for one chain in a complex.
     Args:
@@ -126,12 +131,20 @@ def score_sequence_in_complex(model, alphabet, coords, target_chain_id,
 
     loss, target_padding_mask = get_sequence_loss(model, alphabet, all_coords,
             target_seq)
+    
+    if positions_to_score is not None:
+        loss = loss[positions_to_score]
+        target_padding_mask = target_padding_mask[positions_to_score]
+
     ll_fullseq = -np.sum(loss * ~target_padding_mask) / np.sum(
             ~target_padding_mask)
 
     # Also calculate average when excluding masked portions
     coord_mask = np.all(np.isfinite(coords[target_chain_id]), axis=(-1, -2))
+    if positions_to_score is not None:
+        coord_mask = coord_mask[positions_to_score]
     ll_withcoord = -np.sum(loss * coord_mask) / np.sum(coord_mask)
+
     return ll_fullseq, ll_withcoord
 
 
