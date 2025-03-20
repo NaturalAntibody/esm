@@ -78,7 +78,7 @@ def _concatenate_coords(coords, target_chain_id, padding_length=10):
 
 
 def sample_sequence_in_complex(model, coords, target_chain_id, sequence: str, temperature=1.,
-        padding_length=10, positions_to_sample: list[int] = None):
+        padding_length=10, positions_to_sample: list[int] | None = None):
     """
     Samples sequence for one chain in a complex.
     Args:
