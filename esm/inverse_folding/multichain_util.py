@@ -110,7 +110,7 @@ def sample_sequence_in_complex(model, coords, target_chain_id, sequence: str, te
 
 
 def score_sequence_in_complex(model, alphabet, coords, target_chain_id,
-        target_seq, padding_length=10, positions_to_score: list[int] = None):
+        target_seq, padding_length=10, positions_to_score: list[int] | None = None):
     """
     Scores sequence for one chain in a complex.
     Args:
