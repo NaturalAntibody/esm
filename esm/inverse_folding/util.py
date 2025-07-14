@@ -3,8 +3,10 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from io import TextIOWrapper
 import json
 import math
+import os
 
 import biotite.structure
 from biotite.structure.io import pdbx, pdb
@@ -12,6 +14,7 @@ from biotite.structure.residues import get_residues
 from biotite.structure import filter_peptide_backbone
 from biotite.structure import get_chains
 from biotite.sequence import ProteinSequence
+from biotite.structure import AtomArray
 import numpy as np
 from scipy.spatial import transform
 from scipy.stats import special_ortho_group
@@ -19,12 +22,37 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.data as data
-from typing import Sequence, Tuple, List
+from typing import Sequence, TextIO, Tuple, List
 
 from esm.data import BatchConverter
 
 
-def load_structure(fpath, chain=None):
+def _to_file_handle(file: str | os.PathLike | TextIO) -> TextIO:
+    """
+    Helper function to convert a file path to a file handle.
+    This is useful for reading files in a consistent way.
+    """
+    if isinstance(file, (str, os.PathLike)):
+        return open(file, "r")
+    elif isinstance(file, TextIOWrapper):
+        return file
+    else:
+        raise TypeError("Expected a file path or a file handle.")
+
+
+def _get_structure(file: str | os.PathLike | TextIO) -> biotite.structure.AtomArray:
+    file_handle = _to_file_handle(file)
+    if file_handle.name.endswith("cif"):
+        pdbxf = pdbx.PDBxFile.read(file_handle)
+        return pdbx.get_structure(pdbxf, model=1)
+    elif file_handle.name.endswith("pdb"):
+        pdbf = pdb.PDBFile.read(file_handle)
+        return pdb.get_structure(pdbf, model=1)
+    else:
+        raise ValueError(f"Unsupported file format: {file_handle.name}")
+
+
+def load_structure(file: str | os.PathLike | TextIO, chain=None):
     """
     Args:
         fpath: filepath to either pdb or cif file
@@ -32,28 +60,21 @@ def load_structure(fpath, chain=None):
     Returns:
         biotite.structure.AtomArray
     """
-    if fpath.endswith('cif'):
-        with open(fpath) as fin:
-            pdbxf = pdbx.PDBxFile.read(fin)
-        structure = pdbx.get_structure(pdbxf, model=1)
-    elif fpath.endswith('pdb'):
-        with open(fpath) as fin:
-            pdbf = pdb.PDBFile.read(fin)
-        structure = pdb.get_structure(pdbf, model=1)
+    structure: biotite.structure.AtomArray = _get_structure(file)
     bbmask = filter_peptide_backbone(structure)
     structure = structure[bbmask]
     all_chains = get_chains(structure)
     if len(all_chains) == 0:
-        raise ValueError('No chains found in the input file.')
+        raise ValueError("No chains found in the input file.")
     if chain is None:
         chain_ids = all_chains
     elif isinstance(chain, list):
         chain_ids = chain
     else:
-        chain_ids = [chain] 
+        chain_ids = [chain]
     for chain in chain_ids:
         if chain not in all_chains:
-            raise ValueError(f'Chain {chain} not found in input file')
+            raise ValueError(f"Chain {chain} not found in input file")
     chain_filter = [a.chain_id in chain_ids for a in structure]
     structure = structure[chain_filter]
     return structure
@@ -70,7 +91,7 @@ def extract_coords_from_structure(structure: biotite.structure.AtomArray):
     """
     coords = get_atom_coords_residuewise(["N", "CA", "C"], structure)
     residue_identities = get_residues(structure)[1]
-    seq = ''.join([ProteinSequence.convert_letter_3to1(r) for r in residue_identities])
+    seq = "".join([ProteinSequence.convert_letter_3to1(r) for r in residue_identities])
     return coords, seq
 
 
@@ -92,6 +113,7 @@ def get_atom_coords_residuewise(atoms: List[str], struct: biotite.structure.Atom
     """
     Example for atoms argument: ["N", "CA", "C"]
     """
+
     def filterfn(s, axis=None):
         filters = np.stack([s.atom_name == name for name in atoms], axis=1)
         sum = filters.sum(0)
@@ -110,13 +132,14 @@ def get_sequence_loss(model, alphabet, coords, seq):
     batch_converter = CoordBatchConverter(alphabet)
     batch = [(coords, None, seq)]
     coords, confidence, strs, tokens, padding_mask = batch_converter(
-        batch, device=device)
+        batch, device=device
+    )
 
     prev_output_tokens = tokens[:, :-1].to(device)
     target = tokens[:, 1:]
-    target_padding_mask = (target == alphabet.padding_idx)
+    target_padding_mask = target == alphabet.padding_idx
     logits, _ = model.forward(coords, padding_mask, confidence, prev_output_tokens)
-    loss = F.cross_entropy(logits, target, reduction='none')
+    loss = F.cross_entropy(logits, target, reduction="none")
     loss = loss[0].cpu().detach().numpy()
     target_padding_mask = target_padding_mask[0].cpu().numpy()
     return loss, target_padding_mask
@@ -136,17 +159,19 @@ def get_encoder_output(model, alphabet, coords):
     batch_converter = CoordBatchConverter(alphabet)
     batch = [(coords, None, None)]
     coords, confidence, strs, tokens, padding_mask = batch_converter(
-        batch, device=device)
-    encoder_out = model.encoder.forward(coords, padding_mask, confidence,
-            return_all_hiddens=False)
+        batch, device=device
+    )
+    encoder_out = model.encoder.forward(
+        coords, padding_mask, confidence, return_all_hiddens=False
+    )
     # remove beginning and end (bos and eos tokens)
-    return encoder_out['encoder_out'][0][1:-1, 0]
+    return encoder_out["encoder_out"][0][1:-1, 0]
 
 
 def rotate(v, R):
     """
     Rotates a vector by a rotation matrix.
-    
+
     Args:
         v: 3D vector, tensor of shape (length x batch_size x channels x 3)
         R: rotation matrix, tensor of shape (length x batch_size x 3 x 3)
@@ -182,7 +207,7 @@ def get_rotation_frames(coords):
 
 def nan_to_num(ts, val=0.0):
     """
-    Replaces nans in tensor with a fixed value.    
+    Replaces nans in tensor with a fixed value.
     """
     val = torch.tensor(val, dtype=ts.dtype, device=ts.device)
     return torch.where(~torch.isfinite(ts), val, ts)
@@ -197,24 +222,21 @@ def rbf(values, v_min, v_max, n_bins=16):
     rbf_std = (v_max - v_min) / n_bins
     v_expand = torch.unsqueeze(values, -1)
     z = (values.unsqueeze(-1) - rbf_centers) / rbf_std
-    return torch.exp(-z ** 2)
+    return torch.exp(-(z**2))
 
 
 def norm(tensor, dim, eps=1e-8, keepdim=False):
     """
     Returns L2 norm along a dimension.
     """
-    return torch.sqrt(
-            torch.sum(torch.square(tensor), dim=dim, keepdim=keepdim) + eps)
+    return torch.sqrt(torch.sum(torch.square(tensor), dim=dim, keepdim=keepdim) + eps)
 
 
 def normalize(tensor, dim=-1):
     """
     Normalizes a tensor along a dimension after removing nans.
     """
-    return nan_to_num(
-        torch.div(tensor, norm(tensor, dim=dim, keepdim=True))
-    )
+    return nan_to_num(torch.div(tensor, norm(tensor, dim=dim, keepdim=True)))
 
 
 class CoordBatchConverter(BatchConverter):
@@ -233,15 +255,15 @@ class CoordBatchConverter(BatchConverter):
             tokens: LongTensor of shape batch_size x L
             padding_mask: ByteTensor of shape batch_size x L
         """
-        self.alphabet.cls_idx = self.alphabet.get_idx("<cath>") 
+        self.alphabet.cls_idx = self.alphabet.get_idx("<cath>")
         batch = []
         for coords, confidence, seq in raw_batch:
             if confidence is None:
-                confidence = 1.
+                confidence = 1.0
             if isinstance(confidence, float) or isinstance(confidence, int):
                 confidence = [float(confidence)] * len(coords)
             if seq is None:
-                seq = 'X' * len(coords)
+                seq = "X" * len(coords)
             batch.append(((coords, confidence), seq))
 
         coords_and_confidence, strs, tokens = super().__call__(batch)
@@ -252,18 +274,18 @@ class CoordBatchConverter(BatchConverter):
             for cd, _ in coords_and_confidence
         ]
         confidence = [
-            F.pad(torch.tensor(cf), (1, 1), value=-1.)
+            F.pad(torch.tensor(cf), (1, 1), value=-1.0)
             for _, cf in coords_and_confidence
         ]
         coords = self.collate_dense_tensors(coords, pad_v=np.nan)
-        confidence = self.collate_dense_tensors(confidence, pad_v=-1.)
+        confidence = self.collate_dense_tensors(confidence, pad_v=-1.0)
         if device is not None:
             coords = coords.to(device)
             confidence = confidence.to(device)
             tokens = tokens.to(device)
-        padding_mask = torch.isnan(coords[:,:,0,0])
+        padding_mask = torch.isnan(coords[:, :, 0, 0])
         coord_mask = torch.isfinite(coords.sum(-2).sum(-1))
-        confidence = confidence * coord_mask + (-1.) * padding_mask
+        confidence = confidence * coord_mask + (-1.0) * padding_mask
         return coords, confidence, strs, tokens, padding_mask
 
     def from_lists(self, coords_list, confidence_list=None, seq_list=None, device=None):

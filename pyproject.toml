@@ -1,3 +1,46 @@
+[tool.poetry]
+name = "fair-esm"
+version = "2.0.1"
+description = "Evolutionary Scale Modeling (esm): Pretrained language models for proteins. From Facebook AI Research."
+authors = ["Facebook AI Research"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/facebookresearch/esm"
+repository = "https://github.com/facebookresearch/esm"
+packages = [
+    { include = "esm" },
+    { include = "scripts" },
+]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.12"
+torch = "^1.12.0"
+numpy = "^1.21.0"
+tqdm = "^4.62.0"
+requests = "^2.26.0"
+fairscale = "*"
+biotite = "^1.2.0"
+
+[tool.poetry.extras]
+esmfold = [
+    "biopython",
+    "deepspeed",
+    "dm-tree", 
+    "pytorch-lightning",
+    "omegaconf",
+    "ml-collections",
+    "einops",
+    "scipy",
+]
+
+[tool.poetry.scripts]
+esm-extract = "esm.scripts.extract:main"
+esm-fold = "esm.scripts.fold:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
 [tool.black]
 line-length = 99
 exclude = '''
