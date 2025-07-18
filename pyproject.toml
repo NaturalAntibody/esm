@@ -20,6 +20,7 @@ tqdm = "^4.62.0"
 requests = "^2.26.0"
 fairscale = "*"
 biotite = "^1.2.0"
+torch-geometric = "^2.6.1"
 
 [tool.poetry.extras]
 esmfold = [

@@ -29,3 +29,5 @@ esm/dev
 *.swp
 *.log
 *~
+.python-version
+examples/data
