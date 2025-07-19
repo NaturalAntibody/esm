@@ -34,7 +34,7 @@ def _to_file_handle(file: str | os.PathLike | TextIO) -> TextIO:
     """
     if isinstance(file, (str, os.PathLike)):
         return open(file, "r")
-    elif isinstance(file, TextIOWrapper):
+    elif hasattr(file, "read") and hasattr(file, "name"):
         return file
     else:
         raise TypeError("Expected a file path or a file handle.")
