@@ -31,13 +31,14 @@ from esm.data import BatchConverter
 @dataclass
 class ScoringResult:
     """Result from sequence scoring operations.
-    
+
     Attributes:
         logits: Raw logits over the vocabulary for each position
         ll_fullseq: Average log-likelihood over the full sequence
         ll_withcoord: Average log-likelihood excluding residues without coordinates
     """
-    logits: np.ndarray
+
+    logits: torch.Tensor
     ll_fullseq: float
     ll_withcoord: float
 
@@ -163,13 +164,13 @@ def get_sequence_loss(model, alphabet, coords, seq):
 def score_sequence(model, alphabet, coords, seq) -> ScoringResult:
     """
     Scores a sequence given coordinates.
-    
+
     Args:
         model: An instance of the GVPTransformer model
         alphabet: Alphabet for the model
         coords: L x 3 x 3 array for N, CA, C coordinates
         seq: Target sequence for scoring
-        
+
     Returns:
         ScoringResult containing:
         - logits: Raw logits over the vocabulary for each position
@@ -181,7 +182,9 @@ def score_sequence(model, alphabet, coords, seq) -> ScoringResult:
     # Also calculate average when excluding masked portions
     coord_mask = np.all(np.isfinite(coords), axis=(-1, -2))
     ll_withcoord = -np.sum(loss * coord_mask) / np.sum(coord_mask)
-    return ScoringResult(logits=logits, ll_fullseq=ll_fullseq, ll_withcoord=ll_withcoord)
+    return ScoringResult(
+        logits=logits, ll_fullseq=ll_fullseq, ll_withcoord=ll_withcoord
+    )
 
 
 def get_encoder_output(model, alphabet, coords):
