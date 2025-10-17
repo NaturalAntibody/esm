@@ -10,6 +10,7 @@ from esm.inverse_folding.util import (
     extract_coords_from_structure,
     get_sequence_loss,
     get_encoder_output,
+    ScoringResult,
 )
 
 
@@ -121,7 +122,7 @@ def score_sequence_in_complex(
     target_seq,
     padding_length=10,
     positions_to_score: list[int] | None = None,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> ScoringResult:
     """
     Scores sequence for one chain in a complex.
     Args:
@@ -134,7 +135,7 @@ def score_sequence_in_complex(
         padding_length: padding length in between chains
         positions_to_score: List of positions to calculate loss for.
     Returns:
-        Tuple (logits, ll_fullseq, ll_withcoord)
+        ScoringResult containing:
         - logits: Raw logits over the vocabulary for each position in the target chain
         - ll_fullseq: Average log-likelihood over the full target chain
         - ll_withcoord: Average log-likelihood in target chain excluding those
@@ -158,7 +159,7 @@ def score_sequence_in_complex(
         coord_mask = coord_mask[positions_to_score]
     ll_withcoord = -np.sum(loss * coord_mask) / np.sum(coord_mask)
 
-    return logits, ll_fullseq, ll_withcoord
+    return ScoringResult(logits=logits, ll_fullseq=ll_fullseq, ll_withcoord=ll_withcoord)
 
 
 def get_encoder_output_for_complex(model, alphabet, coords, target_chain_id):

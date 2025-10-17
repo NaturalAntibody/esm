@@ -7,6 +7,7 @@ from io import TextIOWrapper
 import json
 import math
 import os
+from dataclasses import dataclass
 
 import biotite.structure
 from biotite.structure.io import pdbx, pdb
@@ -25,6 +26,20 @@ import torch.utils.data as data
 from typing import Sequence, TextIO, Tuple, List
 
 from esm.data import BatchConverter
+
+
+@dataclass
+class ScoringResult:
+    """Result from sequence scoring operations.
+    
+    Attributes:
+        logits: Raw logits over the vocabulary for each position
+        ll_fullseq: Average log-likelihood over the full sequence
+        ll_withcoord: Average log-likelihood excluding residues without coordinates
+    """
+    logits: np.ndarray
+    ll_fullseq: float
+    ll_withcoord: float
 
 
 def _to_file_handle(file: str | os.PathLike | TextIO) -> TextIO:
@@ -145,13 +160,28 @@ def get_sequence_loss(model, alphabet, coords, seq):
     return logits, loss, target_padding_mask
 
 
-def score_sequence(model, alphabet, coords, seq):
+def score_sequence(model, alphabet, coords, seq) -> ScoringResult:
+    """
+    Scores a sequence given coordinates.
+    
+    Args:
+        model: An instance of the GVPTransformer model
+        alphabet: Alphabet for the model
+        coords: L x 3 x 3 array for N, CA, C coordinates
+        seq: Target sequence for scoring
+        
+    Returns:
+        ScoringResult containing:
+        - logits: Raw logits over the vocabulary for each position
+        - ll_fullseq: Average log-likelihood over the full sequence
+        - ll_withcoord: Average log-likelihood excluding residues without coordinates
+    """
     logits, loss, target_padding_mask = get_sequence_loss(model, alphabet, coords, seq)
     ll_fullseq = -np.sum(loss * ~target_padding_mask) / np.sum(~target_padding_mask)
     # Also calculate average when excluding masked portions
     coord_mask = np.all(np.isfinite(coords), axis=(-1, -2))
     ll_withcoord = -np.sum(loss * coord_mask) / np.sum(coord_mask)
-    return logits, ll_fullseq, ll_withcoord
+    return ScoringResult(logits=logits, ll_fullseq=ll_fullseq, ll_withcoord=ll_withcoord)
 
 
 def get_encoder_output(model, alphabet, coords):

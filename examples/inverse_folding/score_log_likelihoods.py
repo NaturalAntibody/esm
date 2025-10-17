@@ -29,11 +29,11 @@ def score_singlechain_backbone(model, alphabet, args):
     print(native_seq)
     print('\n')
 
-    ll, _ = esm.inverse_folding.util.score_sequence(
+    result = esm.inverse_folding.util.score_sequence(
             model, alphabet, coords, native_seq) 
     print('Native sequence')
-    print(f'Log likelihood: {ll:.2f}')
-    print(f'Perplexity: {np.exp(-ll):.2f}')
+    print(f'Log likelihood: {result.ll_fullseq:.2f}')
+    print(f'Perplexity: {np.exp(-result.ll_fullseq):.2f}')
 
     print('\nScoring variant sequences from sequence file..\n')
     infile = FastaFile()
@@ -43,9 +43,9 @@ def score_singlechain_backbone(model, alphabet, args):
     with open(args.outpath, 'w') as fout:
         fout.write('seqid,log_likelihood\n')
         for header, seq in tqdm(seqs.items()):
-            ll, _ = esm.inverse_folding.util.score_sequence(
+            result = esm.inverse_folding.util.score_sequence(
                     model, alphabet, coords, str(seq))
-            fout.write(header + ',' + str(ll) + '\n')
+            fout.write(header + ',' + str(result.ll_fullseq) + '\n')
     print(f'Results saved to {args.outpath}') 
 
 
@@ -61,11 +61,11 @@ def score_multichain_backbone(model, alphabet, args):
     print(native_seq)
     print('\n')
 
-    ll, _ = esm.inverse_folding.multichain_util.score_sequence_in_complex(
+    result = esm.inverse_folding.multichain_util.score_sequence_in_complex(
             model, alphabet, coords, target_chain_id, native_seq) 
     print('Native sequence')
-    print(f'Log likelihood: {ll:.2f}')
-    print(f'Perplexity: {np.exp(-ll):.2f}')
+    print(f'Log likelihood: {result.ll_fullseq:.2f}')
+    print(f'Perplexity: {np.exp(-result.ll_fullseq):.2f}')
 
     print('\nScoring variant sequences from sequence file..\n')
     infile = FastaFile()
@@ -75,9 +75,9 @@ def score_multichain_backbone(model, alphabet, args):
     with open(args.outpath, 'w') as fout:
         fout.write('seqid,log_likelihood\n')
         for header, seq in tqdm(seqs.items()):
-            ll, _ = esm.inverse_folding.multichain_util.score_sequence_in_complex(
+            result = esm.inverse_folding.multichain_util.score_sequence_in_complex(
                     model, alphabet, coords, target_chain_id, str(seq))
-            fout.write(header + ',' + str(ll) + '\n')
+            fout.write(header + ',' + str(result.ll_fullseq) + '\n')
     print(f'Results saved to {args.outpath}') 
 
 
