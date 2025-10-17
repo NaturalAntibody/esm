@@ -5,13 +5,9 @@
 
 import biotite.structure
 import numpy as np
-import torch
-from typing import Sequence, Tuple, List
-
 from esm.inverse_folding.util import (
     load_structure,
     extract_coords_from_structure,
-    load_coords,
     get_sequence_loss,
     get_encoder_output,
 )
@@ -77,8 +73,15 @@ def _concatenate_coords(coords, target_chain_id, padding_length=10):
     return coords_concatenated
 
 
-def sample_sequence_in_complex(model, coords, target_chain_id, sequence: str, temperature=1.,
-        padding_length=10, positions_to_sample: list[int] | None = None):
+def sample_sequence_in_complex(
+    model,
+    coords,
+    target_chain_id,
+    sequence: str,
+    temperature=1.0,
+    padding_length=10,
+    positions_to_sample: list[int] | None = None,
+):
     """
     Samples sequence for one chain in a complex.
     Args:
@@ -95,22 +98,30 @@ def sample_sequence_in_complex(model, coords, target_chain_id, sequence: str, te
     device = next(model.parameters()).device
 
     # Supply padding tokens for other chains to avoid unused sampling for speed
-    padding_pattern = list(sequence) + ['<pad>'] * (all_coords.shape[0] - len(sequence))
+    padding_pattern = list(sequence) + ["<pad>"] * (all_coords.shape[0] - len(sequence))
 
     if positions_to_sample is None:
         positions_to_sample = list(range(target_chain_len))
 
     for i in positions_to_sample:
-        padding_pattern[i] = '<mask>'
-        
-    sampled = model.sample(all_coords, partial_seq=padding_pattern,
-            temperature=temperature, device=device)
+        padding_pattern[i] = "<mask>"
+
+    sampled = model.sample(
+        all_coords, partial_seq=padding_pattern, temperature=temperature, device=device
+    )
     sampled = sampled[:target_chain_len]
     return sampled
 
 
-def score_sequence_in_complex(model, alphabet, coords, target_chain_id,
-        target_seq, padding_length=10, positions_to_score: list[int] | None = None):
+def score_sequence_in_complex(
+    model,
+    alphabet,
+    coords,
+    target_chain_id,
+    target_seq,
+    padding_length=10,
+    positions_to_score: list[int] | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Scores sequence for one chain in a complex.
     Args:
@@ -121,23 +132,25 @@ def score_sequence_in_complex(model, alphabet, coords, target_chain_id,
         target_chain_id: The chain id to sample sequences for
         target_seq: Target sequence for the target chain for scoring.
         padding_length: padding length in between chains
+        positions_to_score: List of positions to calculate loss for.
     Returns:
-        Tuple (ll_fullseq, ll_withcoord)
+        Tuple (logits, ll_fullseq, ll_withcoord)
+        - logits: Raw logits over the vocabulary for each position in the target chain
         - ll_fullseq: Average log-likelihood over the full target chain
         - ll_withcoord: Average log-likelihood in target chain excluding those
             residues without coordinates
     """
-    all_coords = _concatenate_coords(coords, target_chain_id)
+    all_coords = _concatenate_coords(coords, target_chain_id, padding_length)
 
-    loss, target_padding_mask = get_sequence_loss(model, alphabet, all_coords,
-            target_seq)
-    
+    logits, loss, target_padding_mask = get_sequence_loss(
+        model, alphabet, all_coords, target_seq
+    )
+
     if positions_to_score is not None:
         loss = loss[positions_to_score]
         target_padding_mask = target_padding_mask[positions_to_score]
 
-    ll_fullseq = -np.sum(loss * ~target_padding_mask) / np.sum(
-            ~target_padding_mask)
+    ll_fullseq = -np.sum(loss * ~target_padding_mask) / np.sum(~target_padding_mask)
 
     # Also calculate average when excluding masked portions
     coord_mask = np.all(np.isfinite(coords[target_chain_id]), axis=(-1, -2))
@@ -145,7 +158,7 @@ def score_sequence_in_complex(model, alphabet, coords, target_chain_id,
         coord_mask = coord_mask[positions_to_score]
     ll_withcoord = -np.sum(loss * coord_mask) / np.sum(coord_mask)
 
-    return ll_fullseq, ll_withcoord
+    return logits, ll_fullseq, ll_withcoord
 
 
 def get_encoder_output_for_complex(model, alphabet, coords, target_chain_id):

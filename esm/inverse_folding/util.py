@@ -142,16 +142,16 @@ def get_sequence_loss(model, alphabet, coords, seq):
     loss = F.cross_entropy(logits, target, reduction="none")
     loss = loss[0].cpu().detach().numpy()
     target_padding_mask = target_padding_mask[0].cpu().numpy()
-    return loss, target_padding_mask
+    return logits, loss, target_padding_mask
 
 
 def score_sequence(model, alphabet, coords, seq):
-    loss, target_padding_mask = get_sequence_loss(model, alphabet, coords, seq)
+    logits, loss, target_padding_mask = get_sequence_loss(model, alphabet, coords, seq)
     ll_fullseq = -np.sum(loss * ~target_padding_mask) / np.sum(~target_padding_mask)
     # Also calculate average when excluding masked portions
     coord_mask = np.all(np.isfinite(coords), axis=(-1, -2))
     ll_withcoord = -np.sum(loss * coord_mask) / np.sum(coord_mask)
-    return ll_fullseq, ll_withcoord
+    return logits, ll_fullseq, ll_withcoord
 
 
 def get_encoder_output(model, alphabet, coords):
